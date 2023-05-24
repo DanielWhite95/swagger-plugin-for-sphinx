@@ -10,6 +10,7 @@ OpenAPI spec using the directive swaggerui
 """
 from __future__ import annotations
 
+import shutil
 import urllib.request
 from importlib.metadata import version
 from pathlib import Path
@@ -21,25 +22,21 @@ from sphinx.application import Sphinx
 from sphinx.environment import BuildEnvironment
 from sphinx.util.docutils import SphinxDirective
 
+PROP_TYPES_MIN_JS = "https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.6.0/prop-types.min.js"
+
+REACT_DEVELOPMENT_JS = "https://unpkg.com/react@16/umd/react.development.js"
+
+STANDALONE_BABEL_MIN_JS = "https://unpkg.com/babel-standalone@6/babel.min.js"
+
 SWAGGER_UI_CSS_DEFAULT_URI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/swagger-ui.css"
 
 SWAGGER_UI_BUNDLE_JS_DEFAULT_URI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/swagger-ui-bundle.js"
 
-SWAGGER_UI_BUNDLE_TEMPLATE = jinja2.Template(
-    """
-    <div id="{{ dom_id }}"{% if div_class %} class="{{ div_class }}"{% endif %}>
-<script>
-   window.onload = () => {
-    window.ui = SwaggerUIBundle({
-      url: '{{ swagger_spec_uri }}',
-      dom_id: '#{{ dom_id }}',
-    });
-  };
-</script>
-</div>
-"""
-)
+SWAGGER_UI_BUNDLE_TEMPLATE = jinja2.Template((Path(__file__).parent / "swagger-ui-bundle.j2").read_text())
 
+ADDITIONAL_JS_STATIC_FILES = (
+    Path(__file__).parent / "swagger-layouts.js",
+)
 
 class swagger_ui(nodes.General, nodes.Element):
     pass
@@ -97,6 +94,9 @@ def depart_swagger_ui(self, node: nodes.Element) -> None:
 
 
 def register_assets(app: Sphinx):
+    app.add_js_file(app.config.babel_js_uri)
+    app.add_js_file(app.config.react_dev_js_uri)
+    app.add_js_file(app.config.prop_types_js_uri)
     app.add_js_file(app.config.swagger_bundle_uri)
     app.add_css_file(app.config.swagger_css_uri)
 
@@ -129,6 +129,21 @@ def setup(app: Sphinx) -> dict[str, Any]:
         SWAGGER_UI_CSS_DEFAULT_URI,
         "html",
     )
+    app.add_config_value(
+        "babel_js_uri",
+        STANDALONE_BABEL_MIN_JS,
+        "html",
+    )
+    app.add_config_value(
+        "react_dev_js_uri",
+        REACT_DEVELOPMENT_JS,
+        "html",
+    )
+    app.add_config_value(
+        "prop_types_js_uri",
+        PROP_TYPES_MIN_JS,
+        "html",
+    )
 
     app.add_directive("swagger-ui", SwaggerUI)
     app.add_node(swagger_ui,
@@ -138,7 +153,6 @@ def setup(app: Sphinx) -> dict[str, Any]:
                  man=(generic_visit_swagger_ui, depart_swagger_ui),
                  texinfo=(generic_visit_swagger_ui, depart_swagger_ui)
                  )
-
     app.connect('builder-inited', register_assets)
 
     return {
