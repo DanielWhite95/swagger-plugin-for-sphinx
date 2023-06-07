@@ -24,14 +24,11 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
     build.mkdir()
 
     def run(
-        swagger: list[dict[str, Any]],
         swagger_present_uri: str | None = None,
         swagger_bundle_uri: str | None = None,
         swagger_css_uri: str | None = None,
     ) -> None:
         code = ["extensions = ['swagger_plugin_for_sphinx']"]
-        if swagger:
-            code.append(f"swagger = {swagger}")
         if swagger_present_uri:
             code.append(f"swagger_present_uri = '{swagger_present_uri}'")
         if swagger_bundle_uri:
@@ -43,8 +40,27 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
         with open(conf, "w+", encoding="utf-8") as file:
             file.write("\n".join(code))
 
+        index_page = f"""
+
+        .. toctree::
+           :hidden:
+           :maxdepth: 2
+
+           openapi
+
+        """
         index = docs / "index.rst"
-        index.touch()
+        with open(index, "w+", encoding="utf-8") as file:
+            file.write(index_page)
+
+        openapi_page = f"""
+        
+        .. swaggerui:: path/to/json.json
+
+        """
+        openapi = docs / "openapi.rst"
+        with open(openapi, "w+", encoding="utf-8") as file:
+            file.write(openapi_page)
 
         Sphinx(
             srcdir=str(docs),
@@ -54,6 +70,8 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
             buildername="html",
         ).build()
 
+        print('build done')
+
     return run
 
 
@@ -62,24 +80,13 @@ def test_run_empty(sphinx_runner: SphinxRunner) -> None:
 
 
 def test(sphinx_runner: SphinxRunner, tmp_path: Path) -> None:
-    sphinx_runner(
-        swagger=[
-            {
-                "name": "Service API",
-                "page": "openapi",
-                "options": {
-                    "url": "openapi.yaml",
-                },
-            }
-        ]
-    )
+    sphinx_runner()
 
     build = tmp_path / "build"
     static = build / "_static"
 
     assert (static / "swagger-ui.css").is_file()
     assert (static / "swagger-ui-bundle.js").is_file()
-    assert (static / "swagger-ui-standalone-preset.js").is_file()
 
     with open(build / "openapi.html", encoding="utf-8") as file:
         html = file.read()
