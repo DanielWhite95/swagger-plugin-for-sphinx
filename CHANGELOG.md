@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.2.0
+
+
+* Added Sphinx directive 'swagger-ui' for embedding swagger ui in sphinx docs
+* Removed old method to generate single Swagger UI pages
+* Implemented new Swagger Layout to disable title bar in embedded UI
+* Added new plugins config values
+  * babel_js_uri
+  * react_dev_js_uri
+  * prop_types_js_uri
+
+
+
 ## 3.1.0
 
 * Support Sphinx 7
