@@ -10,11 +10,14 @@ from textwrap import dedent
 from typing import Any, Callable
 
 import pytest
+import jinja2
 from pytest_mock import MockerFixture
 from sphinx.application import Sphinx
+from swagger_plugin_for_sphinx._plugin import SWAGGER_UI_CSS_DEFAULT_URI, SWAGGER_UI_BUNDLE_JS_DEFAULT_URI, PROP_TYPES_MIN_JS, REACT_DEVELOPMENT_JS, STANDALONE_BABEL_MIN_JS
 
 SphinxRunner = Callable[..., None]
 
+EXPECTED_PAGE_TEMPLATE = jinja2.Template(Path(__file__).parent.joinpath("expected_page.html.j2").read_text())
 
 @pytest.fixture
 def sphinx_runner(tmp_path: Path) -> SphinxRunner:
@@ -40,7 +43,7 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
         with open(conf, "w+", encoding="utf-8") as file:
             file.write("\n".join(code))
 
-        index_page = f"""
+        index_page = """
 
         .. toctree::
            :hidden:
@@ -53,9 +56,9 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
         with open(index, "w+", encoding="utf-8") as file:
             file.write(index_page)
 
-        openapi_page = f"""
+        openapi_page = """
         
-        .. swaggerui:: path/to/json.json
+        .. swagger-ui:: https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/examples/v3.0/api-with-examples.yaml
 
         """
         openapi = docs / "openapi.rst"
@@ -76,89 +79,46 @@ def sphinx_runner(tmp_path: Path) -> SphinxRunner:
 
 
 def test_run_empty(sphinx_runner: SphinxRunner) -> None:
-    sphinx_runner([])
-
-
-def test(sphinx_runner: SphinxRunner, tmp_path: Path) -> None:
     sphinx_runner()
 
-    build = tmp_path / "build"
-    static = build / "_static"
-
-    assert (static / "swagger-ui.css").is_file()
-    assert (static / "swagger-ui-bundle.js").is_file()
-
-    with open(build / "openapi.html", encoding="utf-8") as file:
-        html = file.read()
-
-    base_url = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest"
-    expected = dedent(
-        f"""<!DOCTYPE html>
-<html>
-    <head>
-        <title>Service API</title>
-        <link href="{base_url}/swagger-ui.css" rel="stylesheet" type="text/css"/>
-        <meta charset="utf-8"/>
-    </head>
-    <body>
-        <div id="swagger-ui-container"></div>
-        <script src="{base_url}/swagger-ui-standalone-preset.js"></script>
-        <script src="{base_url}/swagger-ui-bundle.js"></script>
-        <script>
-            config = {{'url': 'openapi.yaml'}}
-            config["dom_id"] = "#swagger-ui-container"
-            window.onload = function() {{
-                window.ui = SwaggerUIBundle(config);
-            }}
-        </script>
-    </body>
-</html>"""
-    )
-
-    assert expected == html
-
-
 @pytest.mark.parametrize(
-    "present_uri,bundle_uri,css_uri,expected_present_uri,expected_bundle_uri,expected_css_uri",
+    "present_uri,bundle_uri,css_uri",
     [
         (
             None,
             None,
-            None,
+            None
+            ),
+        (
             "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/swagger-ui-standalone-preset.js",
             "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/swagger-ui-bundle.js",
             "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/swagger-ui.css",
         ),
-        (
-            "foo-present",
-            "foo-bundle",
-            "foo-css",
-            "foo-present",
-            "foo-bundle",
-            "foo-css",
-        ),
     ],
 )
-def test_custom_urls(
-    mocker: MockerFixture,
-    tmp_path: Path,
-    sphinx_runner: SphinxRunner,
+def test(sphinx_runner: SphinxRunner,
+         tmp_path: Path,
     present_uri: str | None,
     bundle_uri: str | None,
     css_uri: str | None,
-    expected_present_uri: str,
-    expected_bundle_uri: str,
-    expected_css_uri: str,
 ) -> None:
-    urlretrieve = mocker.patch.object(urllib.request, "urlretrieve")
+    sphinx_runner(present_uri, bundle_uri, css_uri)
 
-    sphinx_runner([], present_uri, bundle_uri, css_uri)
+    build = tmp_path / "build"
+    static = build / "_static"
+    
+    with open(build / "openapi.html", encoding="utf-8") as file:
+        html = file.read()
 
-    base_path = str(tmp_path) + "/build/_static"
-    assert urlretrieve.call_args_list == [
-        mocker.call(
-            expected_present_uri, f"{base_path}/swagger-ui-standalone-preset.js"
-        ),
-        mocker.call(expected_bundle_uri, f"{base_path}/swagger-ui-bundle.js"),
-        mocker.call(expected_css_uri, f"{base_path}/swagger-ui.css"),
-    ]
+    base_url = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest"
+
+    expected = EXPECTED_PAGE_TEMPLATE.render(
+        babel_js_uri=STANDALONE_BABEL_MIN_JS,
+        swagger_ui_css_uri=css_uri or SWAGGER_UI_CSS_DEFAULT_URI,
+        standalone_react_js_uri=REACT_DEVELOPMENT_JS,
+        prop_types_js_uri=PROP_TYPES_MIN_JS,
+        swagger_ui_bundle_js_uri=bundle_uri or SWAGGER_UI_BUNDLE_JS_DEFAULT_URI,
+        openapi_spec_uri="https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/examples/v3.0/api-with-examples.yaml"
+    )
+
+    assert dedent(expected) == dedent(html)
